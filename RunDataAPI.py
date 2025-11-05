@@ -1,15 +1,26 @@
 import requests
 import webbrowser
+import os
 
-#credentials - get these from https://www.strava.com/settings/api
-CLIENT_ID = os.getenv("StravaClientID")
-CLIENT_SECRET = os.getenv("StravaClientSecret")
-
-def get_authorization_code():
-    """Step 1: Get the authorization code from Strava"""
+def get_strava_tokens():
+    """
+    Get a fresh Strava access token using your environment variables
+    """
+    # Get your credentials from environment variables
+    client_id = os.getenv("StravaClientID")
+    client_secret = os.getenv("StravaClientSecret")
+    
+    if not client_id or not client_secret:
+        print("Error: StravaClientID or StravaClientSecret not found in environment variables")
+        return None
+    
+    print("Strava credentials in environment variables found")
+    print(f"Client ID: {client_id}")
+    
+    #1: Get authorization code
     auth_url = (
         f"https://www.strava.com/oauth/authorize?"
-        f"client_id={CLIENT_ID}"
+        f"client_id={client_id}"
         f"&response_type=code"
         f"&redirect_uri=http://localhost"
         f"&scope=activity:read_all"
@@ -19,60 +30,61 @@ def get_authorization_code():
     print("Opening browser for Strava authorization...")
     print("If browser doesn't open, visit this URL manually:")
     print(auth_url)
-    print("\nAfter authorizing, you'll be redirected to localhost.")
-    print("Copy the ENTIRE URL from your browser address bar and paste it below.")
     
     webbrowser.open(auth_url)
     
-    #URL from user
-    redirect_url = input("\nPaste the redirect URL here: ")
+    print("\nAfter authorizing, you'll be redirected to localhost.")
+    print("Copy the ENTIRE URL from your browser address bar (it will look like: http://localhost/?code=abc123&scope=read,activity:read_all)")
+    print("Paste it below:")
     
-    #get code from URL
+    redirect_url = input("Paste the URL here: ").strip()
+    
+    #Extract the code from the URL
     if 'code=' in redirect_url:
         code = redirect_url.split('code=')[1].split('&')[0]
-        return code
+        print(f"Got authorization code: {code}")
     else:
-        print("Error: Could not find authorization code in URL")
+        print(" Error: Could not find authorization code in URL")
         return None
-
-def get_access_token(authorization_code):
-    """Step 2: Exchange authorization code for access token"""
+    
+    #2: Exchange code for tokens
+    print("\nStep 2: Getting access token...")
     token_url = "https://www.strava.com/oauth/token"
     
     data = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'code': authorization_code,
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'code': code,
         'grant_type': 'authorization_code'
     }
     
-    response = requests.post(token_url, data=data)
-    
-    if response.status_code == 200:
-        token_data = response.json()
-        print("\nSuccess! Here are your tokens:")
-        print(f"Access Token: {token_data['access_token']}")
-        print(f"Refresh Token: {token_data['refresh_token']}")
-        print(f"Expires At: {token_data['expires_at']}")
-        
-        return token_data
-    else:
-        print(f"Error getting access token: {response.status_code}")
-        print(response.text)
+    try:
+        response = requests.post(token_url, data=data)
+        if response.status_code == 200:
+            token_data = response.json()
+            
+            print("\nSuccess! Here are your tokens:")
+            print("=" * 50)
+            print(f"Access Token: {token_data['access_token']}")
+            print(f"Refresh Token: {token_data['refresh_token']}")
+            print(f"Expires At: {datetime.fromtimestamp(token_data['expires_at'])}")
+            print(f"Athlete: {token_data['athlete']['firstname']} {token_data['athlete']['lastname']}")
+            print("=" * 50)
+            
+            #Save to environment variable for current session
+            os.environ['STRAVA_ACCESS_TOKEN'] = token_data['access_token']
+            print(f"\nAccess token saved to environment variable: STRAVA_ACCESS_TOKEN")
+            
+            return token_data
+        else:
+            print(f"Error getting access token: {response.status_code}")
+            print(f"Response: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"Request failed: {e}")
         return None
 
 if __name__ == "__main__":
-    print("Strava Token Generator")
-    print("=" * 50)
-    
-    # Replace these with your actual credentials
-    if CLIENT_ID == None:
-        print("\nPlease update CLIENT_ID and CLIENT_SECRET in your stsyem variables")
-        print("Get them from: https://www.strava.com/settings/api")
-    else:
-        auth_code = get_authorization_code()
-        if auth_code:
-            token_data = get_access_token(auth_code)
-            if token_data:
-                print(f"\nSuccess! Use this access token in the main script:")
-                print(f"analyzer = StravaAnalyzer(access_token='{token_data['access_token']}')")
+    from datetime import datetime
+    get_strava_tokens()
